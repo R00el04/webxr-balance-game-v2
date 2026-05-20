@@ -508,8 +508,11 @@ function renderGameState(players) {
   dom.leftSceneCount.setAttribute("value", String(leftCount));
   dom.rightSceneCount.setAttribute("value", String(rightCount));
   dom.sceneTiltLabel.setAttribute("value", tiltLabel);
-  dom.balanceRig.setAttribute("position", `${offsetMeters} 2.7 -4`);
+
+  // 🚨 [MODIFICADO] Aquí bajamos la posición de la cuerda de 2.7 a 1.16 metros en el eje Y
+  dom.balanceRig.setAttribute("position", `${offsetMeters} 1.16 -4`);
   dom.balanceRig.setAttribute("rotation", `0 0 ${rotationZ}`);
+  
   renderPlayerAvatars(leftPlayers, rightPlayers);
 }
 
@@ -652,97 +655,143 @@ function renderPlayerAvatars(leftPlayers, rightPlayers) {
 function createAvatarEntity(player, index, side) {
   const avatar = document.createElement("a-entity");
   const isCurrentPlayer = player.id === state.currentPlayer?.id;
-  const laneX = side === "LEFT" ? -2.95 : 2.95;
-  const laneZStart = -3.3;
-  const laneZStep = 0.72;
-  const laneZ = laneZStart - index * laneZStep;
-  const accentColor = side === "LEFT" ? "#3b82f6" : "#10b981";
-  const torsoColor = isCurrentPlayer ? "#f8fafc" : accentColor;
-  const headColor = isCurrentPlayer ? "#fde68a" : "#f8fafc";
-  const textColor = isCurrentPlayer ? "#fde68a" : "#e2e8f0";
+  
+  // Posicionamiento: alejados del centro
+  const startOffset = 0.7; // Desplazamiento inicial para no estar pegados al centro
+  const spacingX = 1.1;    // Más espacio entre jugadores
+  const laneX = startOffset + (index * spacingX); 
+  const laneZ = 0;
+  
+  // Estética mejorada
+  const accentColor = side === "LEFT" ? "#3498db" : "#2ecc71";
+  const torsoColor = isCurrentPlayer ? "#f1c40f" : accentColor;
+  const headColor = isCurrentPlayer ? "#ffeaa7" : "#f5cba7";
+  const textColor = isCurrentPlayer ? "#f1c40f" : "#ffffff";
+  
+  // Rotación de "Tirando": Inclinación hacia afuera para simular fuerza
+  const baseRotationY = side === "LEFT" ? 25 : -25;
+  const leanZ = side === "LEFT" ? 15 : -15; // Inclinación hacia atrás/afuera
 
-  avatar.setAttribute("position", `${laneX} 0.45 ${laneZ}`);
+  const relativeX = side === "LEFT" ? -laneX : laneX;
 
-  avatar.appendChild(
-    createPrimitive("a-cylinder", {
-      position: "-0.1 0.17 0",
-      radius: "0.05",
-      height: "0.34",
-      color: accentColor
-    })
-  );
-  avatar.appendChild(
-    createPrimitive("a-cylinder", {
-      position: "0.1 0.17 0",
-      radius: "0.05",
-      height: "0.34",
-      color: accentColor
-    })
-  );
-  avatar.appendChild(
-    createPrimitive("a-cylinder", {
-      position: "-0.22 0.58 0",
-      radius: "0.035",
-      height: "0.32",
-      rotation: "0 0 55",
-      color: accentColor
-    })
-  );
-  avatar.appendChild(
-    createPrimitive("a-cylinder", {
-      position: "0.22 0.58 0",
-      radius: "0.035",
-      height: "0.32",
-      rotation: "0 0 -55",
-      color: accentColor
-    })
-  );
-  avatar.appendChild(
-    createPrimitive("a-box", {
-      position: "0 0.58 0",
-      width: "0.34",
-      height: "0.42",
-      depth: "0.18",
-      color: torsoColor
-    })
-  );
-  avatar.appendChild(
-    createPrimitive("a-sphere", {
-      position: "0 0.95 0",
-      radius: "0.16",
-      color: headColor
-    })
-  );
-  avatar.appendChild(
-    createPrimitive("a-circle", {
-      position: "0 0.02 0",
-      rotation: "-90 0 0",
-      radius: "0.24",
-      color: "#020617",
-      opacity: "0.28"
-    })
-  );
-  avatar.appendChild(
-    createPrimitive("a-text", {
-      value: player.alias,
-      position: "0 1.3 0",
-      align: "center",
-      color: textColor,
-      width: "3.2",
-      side: "double"
-    })
-  );
+  avatar.setAttribute("position", `${relativeX} 0 ${laneZ}`);
+  // Inclinamos todo el avatar hacia atrás para que parezca que hace fuerza
+  avatar.setAttribute("rotation", `0 ${baseRotationY} ${leanZ}`);
+
+  // Animación de jalar: balanceo de fuerza
+  const pullDist = side === "LEFT" ? -0.15 : 0.15;
+  avatar.setAttribute("animation", `property: position; from: ${relativeX} 0 ${laneZ}; to: ${relativeX + pullDist} 0 ${laneZ}; dir: alternate; loop: true; dur: 300; easing: easeInOutSine`);
+
+  // --- CUERPO DETALLADO ---
+
+  // Pelo / Sombrero
+  avatar.appendChild(createPrimitive("a-sphere", {
+    position: "0 1.65 0",
+    radius: "0.25",
+    color: "#2c3e50",
+    scale: "1.1 0.6 1"
+  }));
+
+  // Cabeza
+  avatar.appendChild(createPrimitive("a-sphere", {
+    position: "0 1.48 0",
+    radius: "0.23",
+    color: headColor
+  }));
+
+  // Ojos (expresión de esfuerzo)
+  avatar.appendChild(createPrimitive("a-sphere", {
+    position: "-0.08 1.52 0.18",
+    radius: "0.03",
+    color: "black"
+  }));
+  avatar.appendChild(createPrimitive("a-sphere", {
+    position: "0.08 1.52 0.18",
+    radius: "0.03",
+    color: "black"
+  }));
+
+  // Torso (más robusto)
+  avatar.appendChild(createPrimitive("a-box", {
+    position: "0 0.85 0",
+    width: "0.5",
+    height: "0.7",
+    depth: "0.3",
+    color: torsoColor,
+    radius: "0.05"
+  }));
+
+  // Brazos (en posición de sujetar la cuerda)
+  const armAngle = side === "LEFT" ? -45 : 45;
+  const armX = side === "LEFT" ? 0.3 : -0.3;
+  
+  // Brazo exterior
+  avatar.appendChild(createPrimitive("a-cylinder", {
+    position: `${armX} 0.9 0.1`,
+    radius: "0.06",
+    height: "0.6",
+    rotation: `90 ${armAngle} 0`,
+    color: headColor
+  }));
+
+  // Brazo interior
+  avatar.appendChild(createPrimitive("a-cylinder", {
+    position: `${-armX * 0.5} 0.9 0.15`,
+    radius: "0.06",
+    height: "0.5",
+    rotation: `90 ${-armAngle} 0`,
+    color: headColor
+  }));
+
+  // Piernas (posición de apoyo firme)
+  avatar.appendChild(createPrimitive("a-cylinder", {
+    position: "-0.15 0.25 0",
+    radius: "0.08",
+    height: "0.7",
+    rotation: "0 0 15",
+    color: "#2c3e50"
+  }));
+  avatar.appendChild(createPrimitive("a-cylinder", {
+    position: "0.15 0.25 0",
+    radius: "0.08",
+    height: "0.7",
+    rotation: "0 0 -15",
+    color: "#2c3e50"
+  }));
+
+  // Pies/Zapatos
+  avatar.appendChild(createPrimitive("a-box", {
+    position: "-0.18 -0.05 0.1",
+    width: "0.2",
+    height: "0.1",
+    depth: "0.3",
+    color: "#1a1a1a"
+  }));
+  avatar.appendChild(createPrimitive("a-box", {
+    position: "0.18 -0.05 0.1",
+    width: "0.2",
+    height: "0.1",
+    depth: "0.3",
+    color: "#1a1a1a"
+  }));
+
+  // Nombre
+  avatar.appendChild(createPrimitive("a-text", {
+    value: player.alias,
+    position: "0 2.1 0",
+    align: "center",
+    color: textColor,
+    width: 4
+  }));
 
   return avatar;
 }
 
 function createPrimitive(tagName, attributes) {
   const element = document.createElement(tagName);
-
   Object.entries(attributes).forEach(([name, value]) => {
     element.setAttribute(name, value);
   });
-
   return element;
 }
 
@@ -754,19 +803,15 @@ function clearEntityChildren(element) {
 
 function mapAuthError(error) {
   const message = error?.message || "No se pudo completar la autenticacion.";
-
   if (message.includes("Invalid login credentials")) {
     return "Alias o contrasena incorrectos.";
   }
-
   if (message.includes("User already registered")) {
     return "Ese alias ya esta registrado.";
   }
-
   if (message.includes("Password should be at least")) {
     return "La contrasena debe tener al menos 6 caracteres.";
   }
-
   return message;
 }
 
