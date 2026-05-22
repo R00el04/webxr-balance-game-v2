@@ -73,6 +73,62 @@ where is_active = true
 
 grant select on public.active_players to authenticated;
 
+-- ==========================================
+-- SISTEMA DE RANKING Y HISTORIAL
+-- ==========================================
+
+-- Tabla de Rankings (Estadisticas Globales)
+create table public.leaderboard (
+  player_id uuid primary key references public.players(id) on delete cascade,
+  alias text not null,
+  wins int default 0,
+  total_pulls int default 0,
+  mvp_count int default 0,
+  updated_at timestamp with time zone default now()
+);
+
+-- Tabla de Historial de Partidas
+create table public.match_history (
+  id uuid primary key default gen_random_uuid(),
+  winner_side text check (winner_side in ('LEFT', 'RIGHT')),
+  total_players int default 0,
+  mvp_id uuid references public.players(id),
+  created_at timestamp with time zone default now()
+);
+
+-- Habilitar RLS
+alter table public.leaderboard enable row level security;
+alter table public.match_history enable row level security;
+
+-- Permisos
+grant select, insert, update on public.leaderboard to authenticated;
+grant select, insert on public.match_history to authenticated;
+
+-- Politicas Leaderboard (Lectura para todos, solo el sistema o el usuario podria actualizar, 
+-- pero para simplificar permitiremos actualizacion si esta autenticado)
+create policy "Anyone authenticated can read leaderboard"
+on public.leaderboard for select to authenticated using (true);
+
+create policy "Users can update their own entry"
+on public.leaderboard for update to authenticated 
+using (auth.uid() = player_id) 
+with check (auth.uid() = player_id);
+
+create policy "Users can insert their own entry"
+on public.leaderboard for insert to authenticated 
+with check (auth.uid() = player_id);
+
+-- Politicas Match History (Lectura para todos, insercion para autenticados)
+create policy "Anyone authenticated can read match history"
+on public.match_history for select to authenticated using (true);
+
+create policy "Authenticated users can insert match history"
+on public.match_history for insert to authenticated with check (true);
+
+-- ==========================================
+-- REALTIME CONFIG
+-- ==========================================
+
 do $$
 begin
   if not exists (

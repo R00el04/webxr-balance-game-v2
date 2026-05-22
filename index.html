@@ -2,141 +2,367 @@
 <html lang="es">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebXR Balance Game - Premium Edition</title>
+    <meta charset="UTF-8">
+    <title>Juego: Jalar la Cuerda 3D</title>
 
-  <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css">
 
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- AFRAME -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+
+    <!-- Extras -->
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+
+    <!-- GLTFLoader compatible con AFRAME -->
+    <script src="https://cdn.jsdelivr.net/npm/three-gltf-loader@1.111.0/index.min.js"></script>
+
+    <!-- PIXIV VRM -->
+    <script src="https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.0.10/lib/three-vrm.min.js"></script>
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        // ── 1. CARGADOR VRM CON PIXIV three-vrm ────────────────────────────────
+        AFRAME.registerComponent('vrm-model', {
+            schema: { type: 'string' },
+            init: function () {
+                this.loadModel(this.data);
+            },
+            update: function (oldData) {
+                if (this.data !== oldData) {
+                    this.loadModel(this.data);
+                }
+            },
+            loadModel: function (src) {
+                const el = this.el;
+                if (!src) return;
+
+                const loader = new THREE.GLTFLoader();
+                loader.register(parser => new THREE.VRMLoaderPlugin(parser));
+
+                loader.load(
+                    src,
+                    (gltf) => {
+                        const vrm = gltf.userData.vrm;
+                        if (!vrm) {
+                            console.error('[vrm-model] El archivo no contiene datos VRM:', src);
+                            return;
+                        }
+
+                        THREE.VRMUtils.rotateVRM0(vrm);
+                        el.setObject3D('mesh', vrm.scene);
+                        el.emit('model-loaded', { vrm });
+                        el.emit('vrm-loaded', { vrm });
+                    },
+                    undefined,
+                    (err) => console.error('[vrm-model] Error cargando VRM:', err)
+                );
+            }
+        });
+
+        // ── 2. POSTURA JALAR CUERDA usando humanoid API de Pixiv ───────────────
+        AFRAME.registerComponent('agarrar-cuerda', {
+            schema: {
+                lado: { type: 'string', default: 'izquierda' }
+            },
+            init: function () {
+                this.vrm = null;
+                this.h = null;
+                this.t = 0;
+                this.el.addEventListener('vrm-loaded', (e) => {
+                    this.vrm = e.detail.vrm;
+                    this.h = this.vrm.humanoid;
+                });
+            },
+            rotar(bone, x = 0, y = 0, z = 0) {
+                if (!bone) return;
+                bone.rotation.order = 'XYZ';
+                bone.rotation.x = x;
+                bone.rotation.y = y;
+                bone.rotation.z = z;
+            },
+            tick: function (time, delta) {
+                if (!this.h) return;
+                this.t += delta * 0.001;
+                const osc = Math.sin(this.t * 3) * 0.05;
+
+                const hips = this.h.getNormalizedBoneNode('hips');
+                const spine = this.h.getNormalizedBoneNode('spine');
+                const chest = this.h.getNormalizedBoneNode('chest');
+                const leftShoulder = this.h.getNormalizedBoneNode('leftShoulder');
+                const rightShoulder = this.h.getNormalizedBoneNode('rightShoulder');
+                const leftUpperArm = this.h.getNormalizedBoneNode('leftUpperArm');
+                const rightUpperArm = this.h.getNormalizedBoneNode('rightUpperArm');
+                const leftLowerArm = this.h.getNormalizedBoneNode('leftLowerArm');
+                const rightLowerArm = this.h.getNormalizedBoneNode('rightLowerArm');
+                const leftHand = this.h.getNormalizedBoneNode('leftHand');
+                const rightHand = this.h.getNormalizedBoneNode('rightHand');
+                const leftUpperLeg = this.h.getNormalizedBoneNode('leftUpperLeg');
+                const rightUpperLeg = this.h.getNormalizedBoneNode('rightUpperLeg');
+                const leftLowerLeg = this.h.getNormalizedBoneNode('leftLowerLeg');
+                const rightLowerLeg = this.h.getNormalizedBoneNode('rightLowerLeg');
+                const leftFoot = this.h.getNormalizedBoneNode('leftFoot');
+                const rightFoot = this.h.getNormalizedBoneNode('rightFoot');
+
+                this.rotar(hips, -0.15);
+                this.rotar(spine, 0.15);
+                this.rotar(chest, -0.15);
+
+                if (this.data.lado === 'izquierda') {
+                    this.rotar(leftShoulder, 0.1, 0.0, -0.15);
+                    this.rotar(rightShoulder, 0.1, 0.0, 0.15);
+                    this.rotar(leftUpperArm, -1, 5, 1.40);
+                    this.rotar(rightUpperArm, 1, -1.2, -1.40);
+                    this.rotar(leftLowerArm, -0.25 + osc);
+                    this.rotar(rightLowerArm, -0.25 + osc);
+                    this.rotar(leftHand, 0.2, -0.1, 0);
+                    this.rotar(rightHand, 0.2, 0.1, 0);
+                    this.rotar(rightUpperLeg, 0.35, 0, -0.01);
+                    this.rotar(leftUpperLeg, -0.25, 0, 0.01);
+                    this.rotar(rightLowerLeg, -0.45);
+                    this.rotar(leftLowerLeg, -0.05);
+                    this.rotar(rightFoot, 0.45);
+                    this.rotar(leftFoot, 0.55);
+                } else {
+                    this.rotar(leftShoulder, -1.9, 0.0, 0.15);
+                    this.rotar(rightShoulder, -1, 0.0, -0.15);
+                    this.rotar(leftUpperArm, 0, -1.2, -1.40);
+                    this.rotar(rightUpperArm, 0, 1, -1.2);
+                    this.rotar(leftLowerArm, -0.25 + osc);
+                    this.rotar(rightLowerArm, -0.25 + osc);
+                    this.rotar(leftHand, 0.2, 0.1, 0);
+                    this.rotar(rightHand, 0.2, -0.1, 0);
+                    this.rotar(leftUpperLeg, 0.35, 0, -0.01);
+                    this.rotar(rightUpperLeg, -0.25, 0, 0.01);
+                    this.rotar(leftLowerLeg, -0.45);
+                    this.rotar(rightLowerLeg, -0.05);
+                    this.rotar(leftFoot, 0.45);
+                    this.rotar(rightFoot, 0.55);
+                }
+                this.vrm.update(delta * 0.001);
+            }
+        });
+    </script>
 </head>
 
 <body>
+    <div id="statusBanner" class="status-banner status-info">Inicializando sesion...</div>
 
-  <div id="statusBanner" class="status-banner status-info">Inicializando sesion...</div>
+    <section id="authPanel" class="panel">
+        <p class="eyebrow">Practica Calificada</p>
+        <h1>Jalar la Cuerda 3D</h1>
+        <p class="panel-copy">
+            Registrate o inicia sesion para entrar al juego. Cada cuenta cuenta una sola vez en el marcador.
+        </p>
 
-  <section id="authPanel" class="panel">
-    <p class="eyebrow">Practica Calificada</p>
-    <h1>Balance colaborativo WebXR</h1>
-    <p class="panel-copy">
-      Registrate o inicia sesion para entrar al juego. Cada cuenta cuenta una sola vez en el marcador.
-    </p>
+        <div class="auth-tabs" role="tablist" aria-label="Modo de autenticacion">
+            <button id="loginTab" class="tab-button active" type="button" data-mode="login">Iniciar sesion</button>
+            <button id="registerTab" class="tab-button" type="button" data-mode="register">Registrarse</button>
+        </div>
 
-    <div class="auth-tabs" role="tablist" aria-label="Modo de autenticacion">
-      <button id="loginTab" class="tab-button active" type="button" data-mode="login">Iniciar sesion</button>
-      <button id="registerTab" class="tab-button" type="button" data-mode="register">Registrarse</button>
+        <form id="authForm" class="auth-form">
+            <label class="field">
+                <span>Alias</span>
+                <input id="aliasInput" type="text" autocomplete="username" maxlength="18" placeholder="Ej. EquipoVerde"
+                    required />
+            </label>
+
+            <label class="field">
+                <span>Contrasena</span>
+                <input id="passwordInput" type="password" autocomplete="current-password" minlength="6"
+                    placeholder="Minimo 6 caracteres" required />
+            </label>
+
+            <button id="authSubmitBtn" class="primary-button" type="submit">Entrar al juego</button>
+            <p id="authFeedback" class="feedback" aria-live="polite"></p>
+        </form>
+
+        <div class="panel-notes">
+            <p>Tu posicion se sincroniza en tiempo real con Supabase.</p>
+            <p>Si cierras la pestana, tu presencia expira automaticamente.</p>
+        </div>
+    </section>
+
+    <aside id="gameUI" class="hud hidden">
+        <div class="hud-header">
+            <div>
+                <p class="eyebrow">Sesion activa</p>
+                <h2 id="playerAliasLabel">Jugador</h2>
+            </div>
+            <button id="logoutBtn" class="btn-salir" type="button">Salir</button>
+        </div>
+
+        <div class="session-pill">
+            <span id="sessionIndicator" class="session-dot"></span>
+            <span id="sessionStatusText">Conectando...</span>
+        </div>
+
+        <div class="stats-grid">
+            <article class="stat-card left bg-alien-green">
+                <span class="stat-label">Equipo VERDE</span>
+                <strong id="leftCount">0</strong>
+            </article>
+
+            <article class="stat-card right bg-alien-gris">
+                <span class="stat-label">Equipo GRIS</span>
+                <strong id="rightCount">0</strong>
+            </article>
+
+            <article class="stat-card neutral">
+                <span class="stat-label">Diferencia</span>
+                <strong id="differenceCount">0</strong>
+            </article>
+
+            <article class="stat-card neutral">
+                <span class="stat-label">Tu lado</span>
+                <strong id="currentSide">Sin elegir</strong>
+            </article>
+        </div>
+
+        <!-- Ranking eliminado del sidebar y movido a Modal -->
+
+        <div class="buttons">
+            <button id="leftBtn" type="button" class="btn-alien-green">UNIRSE A VERDE</button>
+            <button id="rightBtn" type="button" class="btn-alien-gris">UNIRSE A GRIS</button>
+        </div>
+
+        <div class="game-actions" style="margin-top: 12px; display: grid; gap: 10px;">
+            <button id="readyBtn" class="primary-button hidden" style="background: var(--neutral); animation: pulse 1s infinite alternate;">¡ESTOY LISTO!</button>
+            <button id="showHistoryBtn" class="ghost-button" style="width: 100%;">🏆 Ver Ranking e Historial</button>
+        </div>
+
+        <p id="playerInfo" class="player-info"> Esperando sincronizacion...</p>
+        <p id="gameplayInfo" class="player-info"> (Para jalar la cuerda presione <strong><kbd>ESPACIO</kbd></strong>)</p>
+    </aside>
+
+    <button id="toggleHudBtn" class="toggle-hud-btn hidden" title="Mostrar/Ocultar Interfaz">
+        🔽
+    </button>
+
+    <!-- Modal de Historial y Ranking (Combinado) -->
+    <div id="historyModal" class="modal-overlay hidden">
+        <div class="modal-content" style="width: min(95vw, 650px); max-height: 90vh; overflow-y: auto;">
+            <p class="eyebrow">Competición Galáctica</p>
+            <h1>Ranking e Historial</h1>
+            
+            <div class="modal-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; text-align: left;">
+                <!-- Sección Ranking -->
+                <div>
+                    <h3 style="color: var(--neutral); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Top 5 Aliens</h3>
+                    <div id="leaderboardList" class="leaderboard-list">
+                        <p class="player-info">Cargando ranking...</p>
+                    </div>
+                </div>
+
+                <!-- Sección Historial -->
+                <div>
+                    <h3 style="color: var(--muted); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Últimas Batallas</h3>
+                    <div id="historyList" class="history-list">
+                        <p class="player-info">Cargando batallas...</p>
+                    </div>
+                </div>
+            </div>
+
+            <button id="closeHistoryBtn" class="primary-button" style="margin-top: 30px;">Cerrar Salón de la Fama</button>
+        </div>
     </div>
 
-    <form id="authForm" class="auth-form">
-      <label class="field">
-        <span>Alias</span>
-        <input id="aliasInput" type="text" autocomplete="username" maxlength="18" placeholder="Ej. EquipoAzul" required />
-      </label>
+    <!-- Modal de Resultados -->
+    <div id="resultsModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <p class="eyebrow">Duelo Finalizado</p>
+            <h1 id="modalWinnerTitle">¡EQUIPO GANADOR!</h1>
+            
+            <div class="results-stats">
+                <div class="result-card mvp">
+                    <span class="label">HÉROE DE LA PARTIDA (MVP)</span>
+                    <strong id="modalMVPAlias">---</strong>
+                    <span class="sub" id="modalMVPScore">0 CLICS</span>
+                </div>
+                <div class="result-card personal">
+                    <span class="label">TU APORTE</span>
+                    <strong id="modalPersonalPulls">0</strong>
+                    <span class="sub">CLICS</span>
+                </div>
+            </div>
 
-      <label class="field">
-        <span>Contrasena</span>
-        <input id="passwordInput" type="password" autocomplete="current-password" minlength="6" placeholder="Minimo 6 caracteres" required />
-      </label>
-
-      <button id="authSubmitBtn" class="primary-button" type="submit">Entrar al juego</button>
-      <p id="authFeedback" class="feedback" aria-live="polite"></p>
-    </form>
-
-    <div class="panel-notes">
-      <p>LEFT / RIGHT se sincroniza en tiempo real con Supabase.</p>
-      <p>Si cierras la pestana, tu presencia expira automaticamente en pocos segundos.</p>
-    </div>
-  </section>
-
-  <aside id="gameUI" class="hud hidden">
-    <div class="hud-header">
-      <div>
-        <p class="eyebrow">Sesion activa</p>
-        <h2 id="playerAliasLabel">Jugador</h2>
-      </div>
-      <button id="logoutBtn" class="ghost-button" type="button">Salir</button>
+            <p class="intermission-countdown">Siguiente ronda en <span id="modalCountdown">10</span>s...</p>
+            <button id="closeModalBtn" class="primary-button">Cerrar Resultados</button>
+        </div>
     </div>
 
-    <div class="session-pill">
-      <span id="sessionIndicator" class="session-dot"></span>
-      <span id="sessionStatusText">Conectando...</span>
-    </div>
+    <a-scene fog="type: linear; color: #a0d8ef; near: 4; far: 28">
 
-    <div class="stats-grid">
-      <article class="stat-card left">
-        <span class="stat-label">Jugadores LEFT</span>
-        <strong id="leftCount">0</strong>
-      </article>
+        <a-assets>
+            <a-asset-item id="rope-model" src="assets/rope.glb"></a-asset-item>
+            <img id="campo-bg" src="assets/background-2.jpg" crossorigin="anonymous">
+            
+            <!-- Audio Assets -->
+            <audio id="music-waiting" src="assets/waiting_loop.mp3" preload="auto" loop="true"></audio>
+            <audio id="music-duel" src="assets/duel_battle.mp3" preload="auto" loop="true"></audio>
+            <audio id="sound-countdown" src="assets/countdown.mp3" preload="auto"></audio>
+            <audio id="sound-pull" src="assets/pull.mp3" preload="auto"></audio>
+            <audio id="sound-win" src="assets/win.mp3" preload="auto"></audio>
+        </a-assets>
 
-      <article class="stat-card right">
-        <span class="stat-label">Jugadores RIGHT</span>
-        <strong id="rightCount">0</strong>
-      </article>
+        <a-sky src="#campo-bg" radius="25" position="0 -10 0" rotation="0 190 0"></a-sky>
 
-      <article class="stat-card neutral">
-        <span class="stat-label">Diferencia</span>
-        <strong id="differenceCount">0</strong>
-      </article>
+        <a-plane position="0 0 -5" rotation="-90 0 0" width="100" height="90" color="#4c9c64"
+            material="roughness: 0.95; metalness: 0.05"></a-plane>
 
-      <article class="stat-card neutral">
-        <span class="stat-label">Tu lado</span>
-        <strong id="currentSide">Sin elegir</strong>
-      </article>
-    </div>
+        <a-plane position="0 0.02 -5" rotation="-90 0 0" width="0.15" height="30" color="#ffffff"
+            material="roughness: 0.90; metalness: 0.1"></a-plane>
 
-    <div class="tilt-panel">
-      <p>Estado actual</p>
-      <strong id="tiltState">Centrado</strong>
-      <span id="tiltOffset">Desplazamiento 0 px</span>
-    </div>
+        <!-- Marcador flotante Premium Rediseñado -->
+        <a-entity id="contenedor-marcador" position="0 4.8 -5">
+            <!-- Panel de Fondo Principal -->
+            <a-plane width="6.5" height="1.8" color="#0a0f1d"
+                material="transparent: true; opacity: 0.9; backdrop-filter: blur(12px)"></a-plane>
+            <a-plane width="6.55" height="1.85" color="#fbbf24"
+                material="transparent: true; opacity: 0.8; wireframe: true" position="0 0 -0.01"></a-plane>
+            
+            <!-- 1. Fila de Reclutamiento (Fija arriba) -->
+            <a-text id="reclutamiento-texto" value="Cargando equipos..." align="center" color="#fbbf24" width="4.8"
+                font="monoid" font-weight="bold" position="0 0.6 0.05" material="shader: flat; fog: false"></a-text>
 
-    <div class="buttons">
-      <button id="leftBtn" type="button">LEFT</button>
-      <button id="rightBtn" type="button">RIGHT</button>
-    </div>
+            <a-plane width="5.5" height="0.02" color="#ffffff" opacity="0.1" position="0 0.4 0.05"></a-plane>
 
-    <p id="playerInfo" class="player-info">Esperando sincronizacion...</p>
-  </aside>
+            <!-- 2. Mensaje Central de Acción (Grande) -->
+            <a-text id="marcador-texto" value="ESPERANDO JUGADORES" align="center" color="#ffffff" width="7"
+                font="monoid" font-weight="bold" position="0 0 0.05" material="shader: flat; fog: false"></a-text>
 
-  <a-scene background="color: #08111f">
+            <a-plane width="5.5" height="0.02" color="#ffffff" opacity="0.1" position="0 -0.4 0.05"></a-plane>
 
-    <a-entity light="type: ambient; intensity: 0.65"></a-entity>
-    <a-entity light="type: directional; intensity: 1.2" position="4 6 2"></a-entity>
-    <a-entity light="type: point; intensity: 0.5; distance: 20" position="0 4 -2"></a-entity>
+            <!-- 3. Cronómetro / Timer (Abajo) -->
+            <a-entity id="contenedor-timer" position="0 -0.65 0.05">
+                <a-text id="timer-texto" value="--:--" align="center" color="#fbbf24" width="5"
+                    font="monoid" font-weight="bold" material="shader: flat; fog: false"></a-text>
+            </a-entity>
+        </a-entity>
 
-    <a-sky color="#08111f"></a-sky>
+<!-- Cuerda -->
+<a-entity id="sistema-cuerda" position="0 1 -5">
+    <a-entity gltf-model="#rope-model" rotation="0 0 90" scale="0.1 10 0.1"></a-entity>
+    <!-- Marcador central de la cuerda (Rojo para feedback) -->
+    <a-cylinder position="0 0 0" radius="0.12" height="0.4" color="#ef4444" rotation="0 0 90" material="shader: flat"></a-cylinder>
+    <a-sphere position="0 0 0" radius="0.14" color="#a01e1e"></a-sphere>
+</a-entity>
 
-    <a-plane position="0 0 -4" rotation="-90 0 0" width="30" height="30" color="#0e1a2e"></a-plane>
-    <a-ring position="0 0.02 -4" rotation="-90 0 0" radius-inner="4.65" radius-outer="5.0" color="#1f314f"></a-ring>
 
-    <a-cylinder position="0 0.25 -4" radius="4.0" height="0.45" color="#233554"></a-cylinder>
-    
-    <a-cylinder position="0 0.69 -4" radius="0.06" height="1.38" color="#c7d2e5"></a-cylinder>
-    <a-sphere position="0 1.38 -4" radius="0.14" color="#f8fafc"></a-sphere>
+        <a-entity id="arena-jugadores"></a-entity>
 
-    <a-entity id="balanceRig" position="0 1.38 -4" rotation="0 0 0">
-      <a-cylinder position="0 0.3 0" radius="0.025" height="0.6" color="#d7dde8"></a-cylinder>
-      <a-box id="balanceBar" position="0 0 0" width="4.5" height="0.08" depth="0.08" color="#f4b400"></a-box>
-      <a-sphere position="0 0 0" radius="0.18" color="#ff6b57"></a-sphere>
-    </a-entity>
+        <a-entity id="main-camera" position="0 2.5 2.5">
+            <a-camera wasd-controls-enabled="false"></a-camera>
+        </a-entity>
 
-    <a-entity id="leftAvatarLane" position="-1.5 0.475 -4"></a-entity>
-    <a-entity id="rightAvatarLane" position="1.5 0.475 -4"></a-entity>
+        <a-light type="ambient" color="#ffffff" intensity="0.5"></a-light>
+        <a-light type="directional" position="3 5 2" intensity="0.8"></a-light>
 
-    <a-text value="LEFT" position="-3.3 1.95 -4" align="center" color="#7cc6ff" scale="1.8 1.8 1.8"></a-text>
-    <a-text value="RIGHT" position="3.3 1.95 -4" align="center" color="#7cf6c2" scale="1.8 1.8 1.8"></a-text>
+    </a-scene>
 
-    <a-text id="leftSceneCount" value="0" position="-2.75 2.55 -4" align="center" color="#dcecff" scale="2.4 2.4 2.4"></a-text>
-    <a-text id="rightSceneCount" value="0" position="2.75 2.55 -4" align="center" color="#dffcef" scale="2.4 2.4 2.4"></a-text>
-    
-    <a-text id="sceneTiltLabel" value="Centrado" position="0 3.2 -4" align="center" color="#f8fafc" scale="1.35 1.35 1.35"></a-text>
-
-    <a-camera position="0 2.6 5.7"></a-camera>
-
-  </a-scene>
-
-  <script src="app.js"></script>
+    <script src="model.js"></script>
+    <script src="app.js"></script>
 </body>
 
 </html>
